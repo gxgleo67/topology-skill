@@ -1,0 +1,1556 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>通用拓扑图</title>
+<style>
+  * { box-sizing: border-box; }
+  html, body {
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    overflow: hidden;
+    font-family: "Microsoft YaHei", "PingFang SC", "Noto Sans CJK SC", Arial, sans-serif;
+    color: #263447;
+    background: #f5f7fa;
+  }
+  #toolbar {
+    position: fixed;
+    inset: 0 0 auto 0;
+    z-index: 10;
+    min-height: 68px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 18px;
+    background: rgba(255,255,255,.97);
+    border-bottom: 1px solid #dfe5ec;
+    box-shadow: 0 2px 10px rgba(36,55,77,.08);
+    white-space: nowrap;
+  }
+  #pageTitle {
+    flex: 1 1 auto;
+    min-width: 160px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-size: 20px;
+    font-weight: 700;
+    color: #23364d;
+  }
+  .search-area {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+  }
+  #searchInput {
+    width: 250px;
+    height: 36px;
+    padding: 0 12px;
+    border: 1px solid #cbd5e1;
+    border-radius: 7px;
+    outline: none;
+    color: #263447;
+    background: #fff;
+    font: 14px inherit;
+  }
+  #searchInput:focus {
+    border-color: #6599d7;
+    box-shadow: 0 0 0 3px rgba(74,132,199,.12);
+  }
+  button {
+    height: 36px;
+    padding: 0 13px;
+    border: 1px solid #cbd5e1;
+    border-radius: 7px;
+    color: #2d4158;
+    background: #fff;
+    font: 14px inherit;
+    cursor: pointer;
+    user-select: none;
+  }
+  button:hover { background: #f0f5fa; border-color: #9fb5cb; }
+  button:active { transform: translateY(1px); }
+  button:disabled { opacity: .55; cursor: wait; }
+  #exportBtn {
+    color: #fff;
+    background: #e98a2d;
+    border-color: #e98a2d;
+    font-weight: 600;
+  }
+  #exportBtn:hover { background: #d9791e; border-color: #d9791e; }
+  #viewport {
+    position: fixed;
+    inset: 68px 0 0 0;
+    overflow: hidden;
+    background-color: #f5f7fa;
+    background-image: radial-gradient(#cdd5df 1px, transparent 1px);
+    background-size: 22px 22px;
+  }
+  #topology {
+    display: block;
+    width: 100%;
+    height: 100%;
+    touch-action: none;
+    user-select: none;
+    cursor: grab;
+  }
+  #topology.dragging { cursor: grabbing; }
+  #operationHint {
+    position: fixed;
+    left: 18px;
+    bottom: 14px;
+    z-index: 5;
+    padding: 6px 10px;
+    border-radius: 6px;
+    color: #637286;
+    background: rgba(255,255,255,.82);
+    font-size: 12px;
+    pointer-events: none;
+  }
+  #searchStatus {
+    position: fixed;
+    right: 18px;
+    bottom: 14px;
+    z-index: 5;
+    max-width: 50vw;
+    padding: 6px 10px;
+    border-radius: 6px;
+    color: #53657a;
+    background: rgba(255,255,255,.9);
+    font-size: 12px;
+    pointer-events: none;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  @media (max-width: 1050px) {
+    #toolbar { gap: 7px; padding-inline: 10px; overflow-x: auto; }
+    #pageTitle { min-width: 130px; font-size: 17px; }
+    #searchInput { width: 190px; }
+    button { padding-inline: 10px; }
+  }
+</style>
+</head>
+<body>
+<header id="toolbar">
+  <div id="pageTitle">通用拓扑图</div>
+  <div class="search-area">
+    <input id="searchInput" type="search" placeholder="搜索节点、标识、分组或备注" autocomplete="off">
+    <button id="searchBtn" type="button">定位</button>
+  </div>
+  <button id="zoomInBtn" type="button" title="放大拓扑">放大</button>
+  <button id="zoomOutBtn" type="button" title="缩小拓扑">缩小</button>
+  <button id="fitBtn" type="button" title="适配并显示完整拓扑">适配全图</button>
+  <button id="exportBtn" type="button">导出 JPG</button>
+</header>
+
+<main id="viewport">
+  <svg id="topology" xmlns="http://www.w3.org/2000/svg" aria-label="拓扑图画布">
+    <defs>
+      <marker id="arrow-main" viewBox="0 0 10 10" refX="9" refY="5"
+              markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+        <path d="M 0 0 L 10 5 L 0 10 z" fill="#e88b2d"></path>
+      </marker>
+      <marker id="arrow-normal" viewBox="0 0 10 10" refX="9" refY="5"
+              markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+        <path d="M 0 0 L 10 5 L 0 10 z" fill="#5b8fc9"></path>
+      </marker>
+      <marker id="arrow-aux" viewBox="0 0 10 10" refX="9" refY="5"
+              markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+        <path d="M 0 0 L 10 5 L 0 10 z" fill="#8497ad"></path>
+      </marker>
+      <style>
+        text {
+          font-family: "Microsoft YaHei", "PingFang SC", "Noto Sans CJK SC", Arial, sans-serif;
+          fill: #293b50;
+        }
+        .group-box { stroke-width: 1.4; }
+        .group-title { font-size: 16px; font-weight: 700; }
+        .group-subtitle { font-size: 12px; fill: #65768a; }
+        .node { cursor: pointer; }
+        .node-box {
+          fill: #ffffff;
+          stroke: #aebfd1;
+          stroke-width: 1.35;
+        }
+        .node-text { font-size: 14px; }
+        .node-id { fill: #65778b; }
+        .tag-box { fill: #edf3f9; stroke: #c8d6e3; stroke-width: .8; }
+        .tag-text { font-size: 12px; fill: #50657b; }
+        .note-box { fill: #fff2ad; stroke: #ddc765; stroke-width: 1; }
+        .note-text { font-size: 12px; fill: #615522; }
+        .edge { fill: none; stroke-linejoin: round; stroke-linecap: round; }
+        .edge-main { stroke: #e88b2d; stroke-width: 4; }
+        .edge-normal { stroke: #5b8fc9; stroke-width: 1.8; }
+        .edge-aux {
+          stroke: #8497ad;
+          stroke-width: 1.7;
+          stroke-dasharray: 8 6;
+        }
+        .edge-label-bg {
+          fill: #fffef7;
+          stroke: #e1e4df;
+          stroke-width: .7;
+          opacity: .97;
+        }
+        .edge-label-text { font-size: 12px; fill: #53667b; }
+        .legend-box {
+          fill: #ffffff;
+          stroke: #cbd5df;
+          stroke-width: 1.2;
+        }
+        .legend-title { font-size: 15px; font-weight: 700; }
+        .legend-text { font-size: 12px; }
+        .empty-text { font-size: 16px; fill: #8290a0; }
+        .dimmed { opacity: .11; }
+        .selected .node-box {
+          stroke: #e88b2d;
+          stroke-width: 3;
+        }
+        .search-hit .node-box {
+          stroke: #4c83c3;
+          stroke-width: 2.5;
+        }
+      </style>
+    </defs>
+    <g id="world"></g>
+  </svg>
+</main>
+
+<div id="operationHint">左键拖动平移 · 滚轮缩放 · 点击节点查看直接关联</div>
+<div id="searchStatus"></div>
+
+<script>
+(() => {
+  "use strict";
+
+  /*
+    在此对象中填入拓扑数据。
+    groups: [{ id, name, color?, description?, columns? }]
+    nodes:  [{ id, name, group, column?, tags?, details?, params?, notes? }]
+    edges:  [{ id?, from, to, label?, type?, bidirectional? }]
+             type: main / normal / aux
+    notes:  [{ id?, text, target? }]
+  */
+  const TOPOLOGY_DATA = __TOPOLOGY_DATA__;
+
+  const svg = document.getElementById("topology");
+  const world = document.getElementById("world");
+  const viewport = document.getElementById("viewport");
+  const searchInput = document.getElementById("searchInput");
+  const searchStatus = document.getElementById("searchStatus");
+  const exportBtn = document.getElementById("exportBtn");
+
+  const NS = "http://www.w3.org/2000/svg";
+  const palette = [
+    { fill: "#e9f3ff", stroke: "#b8d0e8" },
+    { fill: "#f1ebff", stroke: "#cdbde5" },
+    { fill: "#eaf7ee", stroke: "#bad9c4" },
+    { fill: "#fff7e7", stroke: "#e5d4ad" },
+    { fill: "#eaf7f7", stroke: "#b7d6d6" },
+    { fill: "#faedf3", stroke: "#dec1cf" }
+  ];
+
+  const GROUP_Y = 90;
+  const GROUP_GAP = 220;
+  const GROUP_PAD_X = 28;
+  const GROUP_BOTTOM = 28;
+  const COLUMN_GAP = 76;
+  const NODE_GAP = 44;
+  const NOTE_GAP = 10;
+
+  let scale = 1;
+  let translateX = 0;
+  let translateY = 0;
+  let selectedNodeId = null;
+  let searchHitId = null;
+  let searchMatches = [];
+  let searchIndex = -1;
+  let lastQuery = "";
+  let searchTargets = [];
+
+  const measureCanvas = document.createElement("canvas");
+  const measureContext = measureCanvas.getContext("2d");
+
+  function textWidth(value, fontSize = 14, weight = 400) {
+    measureContext.font = `${weight} ${fontSize}px "Microsoft YaHei", "PingFang SC", Arial, sans-serif`;
+    return measureContext.measureText(String(value)).width;
+  }
+
+  function wrapText(value, maxWidth, fontSize = 14, weight = 400) {
+    const source = String(value ?? "");
+    const paragraphs = source.split(/\r?\n/);
+    const result = [];
+
+    for (const paragraph of paragraphs) {
+      if (!paragraph) {
+        result.push("");
+        continue;
+      }
+      let line = "";
+      for (const character of Array.from(paragraph)) {
+        const candidate = line + character;
+        if (line && textWidth(candidate, fontSize, weight) > maxWidth) {
+          result.push(line);
+          line = character;
+        } else {
+          line = candidate;
+        }
+      }
+      result.push(line);
+    }
+    return result.length ? result : [""];
+  }
+
+  function valueText(value) {
+    if (value == null) return "";
+    if (typeof value === "object") {
+      try { return JSON.stringify(value); }
+      catch { return String(value); }
+    }
+    return String(value);
+  }
+
+  function createElement(tag, attributes = {}, parent = world) {
+    const element = document.createElementNS(NS, tag);
+    for (const [key, value] of Object.entries(attributes)) {
+      if (value !== undefined && value !== null) {
+        element.setAttribute(key, String(value));
+      }
+    }
+    if (parent) parent.appendChild(element);
+    return element;
+  }
+
+  function addTextLines(parent, lines, x, y, options = {}) {
+    const text = createElement("text", {
+      x, y,
+      class: options.className || "",
+      "text-anchor": options.anchor || "start"
+    }, parent);
+
+    lines.forEach((line, index) => {
+      const tspan = createElement("tspan", {
+        x,
+        dy: index === 0 ? 0 : (options.lineHeight || 20),
+        "font-weight": options.firstBold && index === 0 ? 700 : undefined,
+        class: options.firstBold && index === 0 ? "" : options.restClass || undefined
+      }, text);
+      tspan.textContent = line;
+    });
+    return text;
+  }
+
+  function normalizeTags(node) {
+    if (!Array.isArray(node.tags)) return [];
+    return node.tags.map(tag => {
+      if (typeof tag === "string" || typeof tag === "number") {
+        return { label: String(tag), meaning: "" };
+      }
+      return {
+        label: String(tag.label ?? tag.name ?? tag.text ?? ""),
+        meaning: String(tag.meaning ?? tag.description ?? "")
+      };
+    }).filter(tag => tag.label);
+  }
+
+  function nodeDetailLines(node) {
+    const lines = [];
+    const reserved = new Set([
+      "id", "name", "title", "group", "module", "column", "order",
+      "x", "y", "w", "h", "width", "height", "tags", "notes", "remarks",
+      "details", "params"
+    ]);
+
+    function appendEntries(value, prefix = "") {
+      if (Array.isArray(value)) {
+        value.forEach(item => {
+          if (typeof item === "object" && item !== null) {
+            const key = item.key ?? item.name ?? item.label ?? "";
+            const val = item.value ?? item.text ?? item.content ?? "";
+            lines.push(`${prefix}${key}${key && val !== "" ? "：" : ""}${valueText(val)}`);
+          } else {
+            lines.push(`${prefix}${valueText(item)}`);
+          }
+        });
+      } else if (value && typeof value === "object") {
+        for (const [key, val] of Object.entries(value)) {
+          lines.push(`${prefix}${key}：${valueText(val)}`);
+        }
+      } else if (value != null && value !== "") {
+        lines.push(`${prefix}${valueText(value)}`);
+      }
+    }
+
+    appendEntries(node.details);
+    appendEntries(node.params, "参数·");
+
+    for (const [key, value] of Object.entries(node)) {
+      if (!reserved.has(key) && typeof value !== "function") {
+        lines.push(`${key}：${valueText(value)}`);
+      }
+    }
+    return lines.filter(Boolean);
+  }
+
+  function tagLayout(node) {
+    const rows = [];
+    let current = [];
+    let used = 0;
+    const maxWidth = node.w - 28;
+
+    for (const tag of node.tags) {
+      const width = Math.ceil(textWidth(tag.label, 12)) + 20;
+      if (current.length && used + 8 + width > maxWidth) {
+        rows.push(current);
+        current = [];
+        used = 0;
+      }
+      const item = { ...tag, width };
+      current.push(item);
+      used += (used ? 8 : 0) + width;
+    }
+    if (current.length) rows.push(current);
+    return rows;
+  }
+
+  function measureNode(node) {
+    const rawLines = [
+      node.name,
+      `ID：${node.id}`,
+      ...nodeDetailLines(node.raw)
+    ];
+
+    const naturalWidth = Math.max(...rawLines.map((line, index) =>
+      textWidth(line, 14, index === 0 ? 700 : 400)
+    ), 0);
+
+    node.w = Math.max(210, Math.min(360, Math.ceil(naturalWidth + 32)));
+    node.lines = rawLines.flatMap((line, index) =>
+      wrapText(line, node.w - 28, 14, index === 0 ? 700 : 400)
+    );
+    node.tagRows = tagLayout(node);
+    node.h = 18 + node.lines.length * 20 +
+      (node.tagRows.length ? node.tagRows.length * 27 + 8 : 0) + 13;
+  }
+
+  function measureNote(note, preferredWidth = 270) {
+    note.w = Math.max(180, Math.min(360, preferredWidth));
+    const prefix = note.id ? `${note.id}　` : "";
+    note.lines = wrapText(prefix + note.text, note.w - 22, 12);
+    note.h = 12 + note.lines.length * 18 + 10;
+  }
+
+  function normalizeData() {
+    const rawGroups = Array.isArray(TOPOLOGY_DATA.groups) ? TOPOLOGY_DATA.groups : [];
+    const groups = rawGroups.map((group, index) => ({
+      raw: group,
+      id: String(group.id ?? `group-${index + 1}`),
+      name: String(group.name ?? group.title ?? group.id ?? `分组 ${index + 1}`),
+      description: String(group.description ?? ""),
+      color: group.color || palette[index % palette.length].fill,
+      stroke: group.stroke || palette[index % palette.length].stroke,
+      columns: Math.max(1, Number(group.columns) || 1),
+      order: group.order ?? index,
+      nodes: []
+    }));
+
+    const groupMap = new Map(groups.map(group => [group.id, group]));
+    const rawNodes = Array.isArray(TOPOLOGY_DATA.nodes) ? TOPOLOGY_DATA.nodes : [];
+
+    const nodes = rawNodes.map((node, index) => {
+      const groupId = String(node.group ?? node.module ?? "__ungrouped");
+      if (!groupMap.has(groupId)) {
+        const generated = {
+          raw: {},
+          id: groupId,
+          name: groupId === "__ungrouped" ? "未分组" : groupId,
+          description: "",
+          color: palette[groups.length % palette.length].fill,
+          stroke: palette[groups.length % palette.length].stroke,
+          columns: 1,
+          order: groups.length,
+          nodes: []
+        };
+        groups.push(generated);
+        groupMap.set(groupId, generated);
+      }
+
+      const normalized = {
+        raw: node,
+        id: String(node.id ?? `node-${index + 1}`),
+        name: String(node.name ?? node.title ?? node.id ?? `节点 ${index + 1}`),
+        groupId,
+        column: node.column == null ? null : Math.max(0, Number(node.column) || 0),
+        order: node.order ?? index,
+        tags: normalizeTags(node),
+        notes: []
+      };
+      groupMap.get(groupId).nodes.push(normalized);
+      return normalized;
+    });
+
+    const nodeMap = new Map(nodes.map(node => [node.id, node]));
+    const notes = [];
+    let noteSequence = 1;
+
+    function addNote(note, forcedTarget) {
+      const normalized = typeof note === "object" && note !== null ? note : { text: note };
+      const item = {
+        raw: normalized,
+        id: String(normalized.id ?? `N${String(noteSequence++).padStart(2, "0")}`),
+        text: String(normalized.text ?? normalized.content ?? normalized.description ?? ""),
+        target: String(normalized.target ?? normalized.node ?? forcedTarget ?? "")
+      };
+      notes.push(item);
+      if (nodeMap.has(item.target)) nodeMap.get(item.target).notes.push(item);
+    }
+
+    rawNodes.forEach(node => {
+      const target = String(node.id ?? "");
+      const attached = [
+        ...(Array.isArray(node.notes) ? node.notes : []),
+        ...(Array.isArray(node.remarks) ? node.remarks : [])
+      ];
+      attached.forEach(note => addNote(note, target));
+    });
+
+    const rawNotes = Array.isArray(TOPOLOGY_DATA.notes) ? TOPOLOGY_DATA.notes : [];
+    rawNotes.forEach(note => addNote(note));
+
+    const edges = (Array.isArray(TOPOLOGY_DATA.edges) ? TOPOLOGY_DATA.edges : [])
+      .map((edge, index) => ({
+        raw: edge,
+        id: String(edge.id ?? `edge-${index + 1}`),
+        from: String(edge.from ?? edge.source ?? ""),
+        to: String(edge.to ?? edge.target ?? ""),
+        label: String(edge.label ?? edge.name ?? ""),
+        type: String(edge.type ?? edge.style ?? "normal").toLowerCase(),
+        bidirectional: Boolean(
+          edge.bidirectional ||
+          edge.direction === "both" ||
+          edge.direction === "bidirectional"
+        ),
+        index
+      }));
+
+    return { groups, nodes, nodeMap, edges, notes };
+  }
+
+  const data = normalizeData();
+
+  function layout() {
+    data.nodes.forEach(measureNode);
+    data.notes.forEach(note => {
+      const target = data.nodeMap.get(note.target);
+      measureNote(note, target ? target.w : 280);
+    });
+
+    let cursorX = 80;
+    let maxBottom = GROUP_Y;
+
+    const orderedGroups = [...data.groups].sort((a, b) => a.order - b.order);
+
+    for (const group of orderedGroups) {
+      group.x = cursorX;
+      group.y = GROUP_Y;
+      group.headerH = group.description ? 66 : 50;
+
+      const columns = [];
+      group.nodes.sort((a, b) => a.order - b.order).forEach((node, index) => {
+        const column = node.column !== null
+          ? node.column
+          : (group.columns > 1 ? index % group.columns : 0);
+        if (!columns[column]) columns[column] = [];
+        columns[column].push(node);
+      });
+
+      let relativeX = GROUP_PAD_X;
+      let tallestColumn = 0;
+
+      columns.forEach((columnNodes, columnIndex) => {
+        if (!columnNodes || !columnNodes.length) return;
+        const columnWidth = Math.max(...columnNodes.map(node => node.w));
+        let y = group.y + group.headerH;
+
+        columnNodes.forEach(node => {
+          node.x = group.x + relativeX;
+          node.y = y;
+
+          let noteY = node.y + node.h + NOTE_GAP;
+          for (const note of node.notes) {
+            note.x = node.x;
+            note.y = noteY;
+            noteY += note.h + NOTE_GAP;
+          }
+
+          const attachedHeight = node.notes.reduce(
+            (sum, note) => sum + note.h + NOTE_GAP, 0
+          );
+          y = node.y + node.h + attachedHeight + NODE_GAP;
+        });
+
+        const height = columnNodes.length
+          ? y - NODE_GAP - (group.y + group.headerH)
+          : 0;
+        tallestColumn = Math.max(tallestColumn, height);
+        relativeX += columnWidth + COLUMN_GAP;
+      });
+
+      const calculatedWidth = relativeX - COLUMN_GAP + GROUP_PAD_X;
+      group.w = Math.max(270, calculatedWidth);
+      group.h = Math.max(105, group.headerH + tallestColumn + GROUP_BOTTOM);
+      group.bottom = group.y + group.h;
+      group.right = group.x + group.w;
+
+      maxBottom = Math.max(maxBottom, group.bottom);
+      cursorX = group.right + GROUP_GAP;
+    }
+
+    const floatingNotes = data.notes.filter(note => !data.nodeMap.has(note.target));
+    let noteX = 80;
+    let noteY = maxBottom + 42;
+    const rightLimit = Math.max(900, cursorX - GROUP_GAP);
+
+    floatingNotes.forEach(note => {
+      if (noteX + note.w > rightLimit && noteX > 80) {
+        noteX = 80;
+        noteY += 100;
+      }
+      note.x = noteX;
+      note.y = noteY;
+      noteX += note.w + 28;
+      maxBottom = Math.max(maxBottom, note.y + note.h);
+    });
+
+    data.contentRight = Math.max(900, cursorX - GROUP_GAP);
+    data.contentBottom = maxBottom;
+  }
+
+  layout();
+
+  function edgeKind(edge) {
+    if (
+      edge.raw.main === true ||
+      ["main", "core", "primary", "关键", "主数据流", "核心链路"].includes(edge.type)
+    ) return "main";
+
+    if (
+      edge.raw.dashed === true ||
+      ["aux", "dashed", "optional", "popup", "dialog", "辅助", "弹窗", "浮层"]
+        .includes(edge.type)
+    ) return "aux";
+
+    return "normal";
+  }
+
+  function expandRect(rect, amount = 5) {
+    return {
+      x: rect.x - amount,
+      y: rect.y - amount,
+      w: rect.w + amount * 2,
+      h: rect.h + amount * 2
+    };
+  }
+
+  function segmentHitsRect(a, b, rect) {
+    const r = expandRect(rect, 3);
+    if (a.x === b.x) {
+      const x = a.x;
+      if (x <= r.x || x >= r.x + r.w) return false;
+      const low = Math.min(a.y, b.y);
+      const high = Math.max(a.y, b.y);
+      return high > r.y && low < r.y + r.h;
+    }
+    if (a.y === b.y) {
+      const y = a.y;
+      if (y <= r.y || y >= r.y + r.h) return false;
+      const low = Math.min(a.x, b.x);
+      const high = Math.max(a.x, b.x);
+      return high > r.x && low < r.x + r.w;
+    }
+    return false;
+  }
+
+  function pathHitsObstacle(points, obstacles) {
+    for (let i = 0; i < points.length - 1; i++) {
+      if (obstacles.some(rect => segmentHitsRect(points[i], points[i + 1], rect))) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  function simplifyPoints(points) {
+    const clean = points.filter((point, index) => {
+      if (index === 0) return true;
+      return point.x !== points[index - 1].x || point.y !== points[index - 1].y;
+    });
+
+    return clean.filter((point, index) => {
+      if (index === 0 || index === clean.length - 1) return true;
+      const before = clean[index - 1];
+      const after = clean[index + 1];
+      return !(
+        (before.x === point.x && point.x === after.x) ||
+        (before.y === point.y && point.y === after.y)
+      );
+    });
+  }
+
+  function buildObstacles() {
+    return [
+      ...data.nodes.map(node => ({
+        id: node.id, x: node.x, y: node.y, w: node.w, h: node.h
+      })),
+      ...data.notes.map(note => ({
+        id: note.id, x: note.x, y: note.y, w: note.w, h: note.h
+      })),
+      ...data.groups.map(group => ({
+        id: group.id,
+        x: group.x,
+        y: group.y,
+        w: group.w,
+        h: group.headerH - 8
+      }))
+    ];
+  }
+
+  function routeEdges() {
+    const obstacles = buildObstacles();
+    const minRouteY = Math.min(...data.groups.map(group => group.y), GROUP_Y);
+    const pairCounts = new Map();
+    const pairSeen = new Map();
+    let detourLane = 0;
+
+    data.edges.forEach(edge => {
+      const key = `${edge.from}\u0000${edge.to}`;
+      pairCounts.set(key, (pairCounts.get(key) || 0) + 1);
+    });
+
+    for (const edge of data.edges) {
+      const source = data.nodeMap.get(edge.from);
+      const target = data.nodeMap.get(edge.to);
+      if (!source || !target) {
+        edge.points = [];
+        continue;
+      }
+
+      const key = `${edge.from}\u0000${edge.to}`;
+      const seen = pairSeen.get(key) || 0;
+      pairSeen.set(key, seen + 1);
+      const count = pairCounts.get(key);
+      const pairOffset = (seen - (count - 1) / 2) * 11;
+      const sourceOffset = Math.max(
+        -source.h / 2 + 13,
+        Math.min(source.h / 2 - 13, pairOffset)
+      );
+      const targetOffset = Math.max(
+        -target.h / 2 + 13,
+        Math.min(target.h / 2 - 13, pairOffset)
+      );
+      const lane = edge.index % 8;
+      let points;
+
+      if (source === target) {
+        const start = {
+          x: source.x + source.w,
+          y: source.y + source.h / 2 + sourceOffset
+        };
+        const end = { x: source.x + source.w / 2, y: source.y };
+        const outsideX = start.x + 40 + lane * 15;
+        const topY = source.y - 27 - lane * 13;
+        points = [
+          start,
+          { x: outsideX, y: start.y },
+          { x: outsideX, y: topY },
+          { x: end.x, y: topY },
+          end
+        ];
+      } else if (source.groupId === target.groupId) {
+        const start = {
+          x: source.x + source.w,
+          y: source.y + source.h / 2 + sourceOffset
+        };
+        const end = {
+          x: target.x + target.w,
+          y: target.y + target.h / 2 + targetOffset
+        };
+        const outsideX = Math.max(start.x, end.x) + 42 + lane * 16;
+        points = [
+          start,
+          { x: outsideX, y: start.y },
+          { x: outsideX, y: end.y },
+          end
+        ];
+      } else {
+        const forward = target.x + target.w / 2 >= source.x + source.w / 2;
+        const start = forward
+          ? { x: source.x + source.w, y: source.y + source.h / 2 + sourceOffset }
+          : { x: source.x, y: source.y + source.h / 2 + sourceOffset };
+        const end = forward
+          ? { x: target.x, y: target.y + target.h / 2 + targetOffset }
+          : { x: target.x + target.w, y: target.y + target.h / 2 + targetOffset };
+
+        if (forward) {
+          const middleX = (start.x + end.x) / 2 + pairOffset * 1.2;
+          const direct = [
+            start,
+            { x: middleX, y: start.y },
+            { x: middleX, y: end.y },
+            end
+          ];
+          const relevantObstacles = obstacles.filter(obstacle =>
+            obstacle.id !== source.id && obstacle.id !== target.id
+          );
+          points = pathHitsObstacle(direct, relevantObstacles) ? null : direct;
+        } else {
+          points = null;
+        }
+
+        if (!points) {
+          const routeY = minRouteY - 44 - detourLane++ * 22;
+          const startOutsideX = start.x + (forward ? 26 : -26);
+          const endOutsideX = end.x + (forward ? -26 : 26);
+          points = [
+            start,
+            { x: startOutsideX, y: start.y },
+            { x: startOutsideX, y: routeY },
+            { x: endOutsideX, y: routeY },
+            { x: endOutsideX, y: end.y },
+            end
+          ];
+        }
+      }
+
+      edge.points = simplifyPoints(points);
+    }
+  }
+
+  routeEdges();
+
+  function renderGroups() {
+    for (const group of data.groups) {
+      const container = createElement("g", {
+        class: "group",
+        "data-group": group.id
+      });
+      createElement("rect", {
+        class: "group-box",
+        x: group.x,
+        y: group.y,
+        width: group.w,
+        height: group.h,
+        rx: 16,
+        fill: group.color,
+        stroke: group.stroke
+      }, container);
+      addTextLines(container, [group.name], group.x + 18, group.y + 29, {
+        className: "group-title"
+      });
+      if (group.description) {
+        addTextLines(
+          container,
+          wrapText(group.description, group.w - 36, 12),
+          group.x + 18,
+          group.y + 49,
+          { className: "group-subtitle", lineHeight: 17 }
+        );
+      }
+    }
+  }
+
+  function renderEdges() {
+    for (const edge of data.edges) {
+      if (!edge.points.length) continue;
+      const kind = edgeKind(edge);
+      const pathData = edge.points.map((point, index) =>
+        `${index === 0 ? "M" : "L"} ${point.x} ${point.y}`
+      ).join(" ");
+
+      const path = createElement("path", {
+        d: pathData,
+        class: `edge edge-${kind}`,
+        "data-edge": edge.id,
+        "data-from": edge.from,
+        "data-to": edge.to,
+        "marker-end": `url(#arrow-${kind})`,
+        "marker-start": edge.bidirectional ? `url(#arrow-${kind})` : undefined
+      });
+      edge.element = path;
+    }
+  }
+
+  function renderNodes() {
+    for (const node of data.nodes) {
+      const container = createElement("g", {
+        class: "node",
+        "data-id": node.id,
+        "data-group": node.groupId
+      });
+      createElement("rect", {
+        class: "node-box",
+        x: node.x,
+        y: node.y,
+        width: node.w,
+        height: node.h,
+        rx: 10
+      }, container);
+
+      addTextLines(
+        container,
+        node.lines,
+        node.x + 14,
+        node.y + 23,
+        {
+          className: "node-text",
+          firstBold: true,
+          restClass: "node-id",
+          lineHeight: 20
+        }
+      );
+
+      let tagY = node.y + 18 + node.lines.length * 20 + 5;
+      for (const row of node.tagRows) {
+        let tagX = node.x + 14;
+        for (const tag of row) {
+          createElement("rect", {
+            class: "tag-box",
+            x: tagX,
+            y: tagY,
+            width: tag.width,
+            height: 21,
+            rx: 5
+          }, container);
+          addTextLines(container, [tag.label], tagX + 10, tagY + 15, {
+            className: "tag-text"
+          });
+          tagX += tag.width + 8;
+        }
+        tagY += 27;
+      }
+      node.element = container;
+    }
+  }
+
+  function renderNotes() {
+    for (const note of data.notes) {
+      const container = createElement("g", {
+        class: "note",
+        "data-note": note.id,
+        "data-target": note.target
+      });
+      createElement("rect", {
+        class: "note-box",
+        x: note.x,
+        y: note.y,
+        width: note.w,
+        height: note.h,
+        rx: 7
+      }, container);
+      addTextLines(
+        container,
+        note.lines,
+        note.x + 11,
+        note.y + 20,
+        { className: "note-text", lineHeight: 18 }
+      );
+      note.element = container;
+    }
+  }
+
+  const labelBoxes = [];
+
+  function rectanglesOverlap(a, b) {
+    return !(
+      a.x + a.w + 5 < b.x ||
+      b.x + b.w + 5 < a.x ||
+      a.y + a.h + 5 < b.y ||
+      b.y + b.h + 5 < a.y
+    );
+  }
+
+  function renderEdgeLabels() {
+    const obstacles = buildObstacles();
+
+    for (const edge of data.edges) {
+      if (!edge.points.length || !edge.label) continue;
+
+      const segments = [];
+      for (let i = 0; i < edge.points.length - 1; i++) {
+        const a = edge.points[i];
+        const b = edge.points[i + 1];
+        const length = Math.abs(b.x - a.x) + Math.abs(b.y - a.y);
+        segments.push({ a, b, length });
+      }
+      segments.sort((a, b) => b.length - a.length);
+
+      const lines = wrapText(edge.label, 250, 12);
+      const width = Math.ceil(Math.max(...lines.map(line => textWidth(line, 12)))) + 16;
+      const height = lines.length * 17 + 9;
+      let chosen = null;
+
+      for (const segment of segments) {
+        if (segment.length < 35) continue;
+        const horizontal = segment.a.y === segment.b.y;
+        const centerX = (segment.a.x + segment.b.x) / 2;
+        const centerY = (segment.a.y + segment.b.y) / 2;
+        const offsets = [0, 14, -14, 28, -28, 44, -44, 62];
+
+        for (const offset of offsets) {
+          for (const along of [0, 30, -30, 65, -65]) {
+            const x = horizontal
+              ? centerX - width / 2 + along
+              : centerX + (offset >= 0 ? 9 + offset : -width - 9 + offset);
+            const y = horizontal
+              ? centerY - height - 7 + offset
+              : centerY - height / 2 + along;
+            const box = { x, y, w: width, h: height };
+            if (
+              !obstacles.some(obstacle => rectanglesOverlap(box, obstacle)) &&
+              !labelBoxes.some(other => rectanglesOverlap(box, other))
+            ) {
+              chosen = { x, y };
+              break;
+            }
+          }
+          if (chosen) break;
+        }
+        if (chosen) break;
+      }
+
+      if (!chosen && segments.length) {
+        const segment = segments[0];
+        chosen = {
+          x: (segment.a.x + segment.b.x) / 2 - width / 2,
+          y: Math.min(segment.a.y, segment.b.y) - height - 12
+        };
+      }
+      if (!chosen) continue;
+
+      const container = createElement("g", {
+        class: "edge-label",
+        "data-edge": edge.id
+      });
+      createElement("rect", {
+        class: "edge-label-bg",
+        x: chosen.x,
+        y: chosen.y,
+        width,
+        height,
+        rx: 5
+      }, container);
+      addTextLines(
+        container,
+        lines,
+        chosen.x + 8,
+        chosen.y + 17,
+        { className: "edge-label-text", lineHeight: 17 }
+      );
+      labelBoxes.push({ ...chosen, w: width, h: height });
+    }
+  }
+
+  function renderLegend() {
+    const entries = [];
+    const usedKinds = new Set(data.edges.map(edgeKind));
+
+    if (usedKinds.has("main")) {
+      entries.push({ kind: "line", style: "main", text: "橙色粗实线：主数据流、核心链路或关键路径" });
+    }
+    if (usedKinds.has("normal")) {
+      entries.push({ kind: "line", style: "normal", text: "蓝色细实线：普通连接、跳转、流向或一般依赖" });
+    }
+    if (usedKinds.has("aux")) {
+      entries.push({ kind: "line", style: "aux", text: "灰色虚线：弹窗、浮层、辅助或可选关系" });
+    }
+    if (data.edges.some(edge => edge.bidirectional)) {
+      entries.push({ kind: "text", text: "双箭头：关系可沿两个方向进行" });
+    }
+
+    const tags = new Map();
+    data.nodes.forEach(node => node.tags.forEach(tag => {
+      if (!tags.has(tag.label)) tags.set(tag.label, tag.meaning);
+    }));
+    tags.forEach((meaning, label) => {
+      entries.push({
+        kind: "tag",
+        text: `${label}：${meaning || "节点附加标记"}`
+      });
+    });
+
+    if (data.notes.length) {
+      entries.push({
+        kind: "note",
+        text: "黄色备注：编号与说明对应，可表示限制、异常或补充信息"
+      });
+    }
+
+    data.groups.forEach(group => {
+      entries.push({
+        kind: "group",
+        color: group.color,
+        stroke: group.stroke,
+        text: `${group.name}：该底色对应此逻辑分组`
+      });
+    });
+
+    if (!entries.length) return;
+
+    const width = 390;
+    const rows = entries.map(entry => ({
+      ...entry,
+      lines: wrapText(entry.text, width - 86, 12)
+    }));
+    const height = 44 + rows.reduce(
+      (sum, row) => sum + Math.max(27, row.lines.length * 17 + 8), 0
+    ) + 12;
+    const x = Math.max(80, data.contentRight - width);
+    const y = data.contentBottom + 54;
+
+    const container = createElement("g", { class: "legend" });
+    createElement("rect", {
+      class: "legend-box",
+      x, y, width, height, rx: 12
+    }, container);
+    addTextLines(container, ["图例"], x + 18, y + 27, {
+      className: "legend-title"
+    });
+
+    let rowY = y + 45;
+    rows.forEach(row => {
+      const rowHeight = Math.max(27, row.lines.length * 17 + 8);
+      const centerY = rowY + rowHeight / 2;
+
+      if (row.kind === "line") {
+        const line = createElement("line", {
+          x1: x + 18,
+          x2: x + 60,
+          y1: centerY,
+          y2: centerY,
+          class: `edge edge-${row.style}`,
+          "marker-end": `url(#arrow-${row.style})`
+        }, container);
+        line.setAttribute("fill", "none");
+      } else if (row.kind === "group") {
+        createElement("rect", {
+          x: x + 18,
+          y: centerY - 9,
+          width: 42,
+          height: 18,
+          rx: 4,
+          fill: row.color,
+          stroke: row.stroke
+        }, container);
+      } else if (row.kind === "note") {
+        createElement("rect", {
+          class: "note-box",
+          x: x + 18,
+          y: centerY - 9,
+          width: 42,
+          height: 18,
+          rx: 4
+        }, container);
+      } else if (row.kind === "tag") {
+        createElement("rect", {
+          class: "tag-box",
+          x: x + 18,
+          y: centerY - 9,
+          width: 42,
+          height: 18,
+          rx: 4
+        }, container);
+      }
+
+      addTextLines(
+        container,
+        row.lines,
+        x + 72,
+        rowY + 16,
+        { className: "legend-text", lineHeight: 17 }
+      );
+      rowY += rowHeight;
+    });
+  }
+
+  renderGroups();
+  renderEdges();
+  renderNodes();
+  renderNotes();
+  renderEdgeLabels();
+  renderLegend();
+
+  if (!data.nodes.length) {
+    addTextLines(world, ["暂无拓扑数据"], 80, 110, {
+      className: "empty-text"
+    });
+  }
+
+  function applyTransform() {
+    world.setAttribute(
+      "transform",
+      `translate(${translateX} ${translateY}) scale(${scale})`
+    );
+  }
+
+  function fitTopology() {
+    const viewportRect = svg.getBoundingClientRect();
+    let bounds;
+    try {
+      bounds = world.getBBox();
+    } catch {
+      return;
+    }
+    if (!bounds.width || !bounds.height) return;
+
+    const padding = 58;
+    const nextScale = Math.max(
+      0.04,
+      Math.min(
+        1.5,
+        (viewportRect.width - padding * 2) / bounds.width,
+        (viewportRect.height - padding * 2) / bounds.height
+      )
+    );
+
+    scale = nextScale;
+    translateX = (viewportRect.width - bounds.width * scale) / 2 - bounds.x * scale;
+    translateY = (viewportRect.height - bounds.height * scale) / 2 - bounds.y * scale;
+    applyTransform();
+  }
+
+  function zoomAt(factor, clientX, clientY) {
+    const rect = svg.getBoundingClientRect();
+    const x = clientX == null ? rect.width / 2 : clientX - rect.left;
+    const y = clientY == null ? rect.height / 2 : clientY - rect.top;
+    const nextScale = Math.max(0.04, Math.min(5, scale * factor));
+    const worldX = (x - translateX) / scale;
+    const worldY = (y - translateY) / scale;
+
+    translateX = x - worldX * nextScale;
+    translateY = y - worldY * nextScale;
+    scale = nextScale;
+    applyTransform();
+  }
+
+  function applyFocus() {
+    world.querySelectorAll(".dimmed,.selected,.search-hit").forEach(element => {
+      element.classList.remove("dimmed", "selected", "search-hit");
+    });
+
+    if (searchHitId && data.nodeMap.has(searchHitId)) {
+      data.nodeMap.get(searchHitId).element.classList.add("search-hit");
+    }
+
+    if (!selectedNodeId) return;
+
+    const visibleNodes = new Set([selectedNodeId]);
+    const visibleEdges = new Set();
+
+    data.edges.forEach(edge => {
+      if (edge.from === selectedNodeId || edge.to === selectedNodeId) {
+        visibleEdges.add(edge.id);
+        visibleNodes.add(edge.from);
+        visibleNodes.add(edge.to);
+      }
+    });
+
+    data.nodes.forEach(node => {
+      if (!visibleNodes.has(node.id)) node.element.classList.add("dimmed");
+      if (node.id === selectedNodeId) node.element.classList.add("selected");
+    });
+
+    world.querySelectorAll(".edge,.edge-label").forEach(element => {
+      if (!visibleEdges.has(element.getAttribute("data-edge"))) {
+        element.classList.add("dimmed");
+      }
+    });
+
+    data.notes.forEach(note => {
+      if (note.target && !visibleNodes.has(note.target)) {
+        note.element.classList.add("dimmed");
+      }
+    });
+  }
+
+  function buildSearchTargets() {
+    searchTargets = [];
+
+    data.nodes.forEach(node => {
+      const group = data.groups.find(item => item.id === node.groupId);
+      searchTargets.push({
+        label: `${node.name}（${node.id}）`,
+        nodeId: node.id,
+        x: node.x,
+        y: node.y,
+        w: node.w,
+        h: node.h,
+        haystack: [
+          node.name,
+          node.id,
+          group ? group.name : "",
+          group ? group.id : "",
+          ...node.tags.map(tag => tag.label),
+          ...node.notes.map(note => `${note.id} ${note.text}`)
+        ].join(" ").toLowerCase()
+      });
+    });
+
+    data.groups.forEach(group => {
+      searchTargets.push({
+        label: `分组：${group.name}`,
+        nodeId: null,
+        x: group.x,
+        y: group.y,
+        w: group.w,
+        h: group.h,
+        haystack: `${group.name} ${group.id} ${group.description}`.toLowerCase()
+      });
+    });
+
+    data.notes.filter(note => !data.nodeMap.has(note.target)).forEach(note => {
+      searchTargets.push({
+        label: `备注：${note.id} ${note.text}`,
+        nodeId: null,
+        x: note.x,
+        y: note.y,
+        w: note.w,
+        h: note.h,
+        haystack: `${note.id} ${note.text}`.toLowerCase()
+      });
+    });
+  }
+
+  buildSearchTargets();
+
+  function runSearch() {
+    const query = searchInput.value.trim().toLowerCase();
+    if (!query) {
+      searchMatches = [];
+      searchIndex = -1;
+      lastQuery = "";
+      searchHitId = null;
+      searchStatus.textContent = "";
+      applyFocus();
+      return;
+    }
+
+    if (query !== lastQuery) {
+      lastQuery = query;
+      searchMatches = searchTargets.filter(target => target.haystack.includes(query));
+      searchIndex = 0;
+    } else if (searchMatches.length) {
+      searchIndex = (searchIndex + 1) % searchMatches.length;
+    }
+
+    if (!searchMatches.length) {
+      searchHitId = null;
+      searchStatus.textContent = "未找到匹配内容";
+      applyFocus();
+      return;
+    }
+
+    const target = searchMatches[searchIndex];
+    const rect = svg.getBoundingClientRect();
+    translateX = rect.width / 2 - (target.x + target.w / 2) * scale;
+    translateY = rect.height / 2 - (target.y + target.h / 2) * scale;
+    searchHitId = target.nodeId;
+    applyTransform();
+    applyFocus();
+    searchStatus.textContent =
+      `${searchIndex + 1}/${searchMatches.length}：${target.label}（再次定位查看下一项）`;
+  }
+
+  let pointerStart = null;
+  let dragging = false;
+
+  svg.addEventListener("pointerdown", event => {
+    if (event.button !== 0) return;
+    pointerStart = {
+      x: event.clientX,
+      y: event.clientY,
+      translateX,
+      translateY,
+      target: event.target
+    };
+    dragging = false;
+    svg.setPointerCapture(event.pointerId);
+  });
+
+  svg.addEventListener("pointermove", event => {
+    if (!pointerStart) return;
+    const dx = event.clientX - pointerStart.x;
+    const dy = event.clientY - pointerStart.y;
+
+    if (Math.abs(dx) + Math.abs(dy) > 5) {
+      dragging = true;
+      svg.classList.add("dragging");
+    }
+    if (dragging) {
+      translateX = pointerStart.translateX + dx;
+      translateY = pointerStart.translateY + dy;
+      applyTransform();
+    }
+  });
+
+  function finishPointer(event) {
+    if (!pointerStart) return;
+    const wasDragging = dragging;
+    const originalTarget = pointerStart.target;
+    pointerStart = null;
+    dragging = false;
+    svg.classList.remove("dragging");
+
+    if (svg.hasPointerCapture(event.pointerId)) {
+      svg.releasePointerCapture(event.pointerId);
+    }
+    if (wasDragging) return;
+
+    const nodeElement = originalTarget.closest
+      ? originalTarget.closest(".node")
+      : null;
+
+    if (nodeElement) {
+      const id = nodeElement.getAttribute("data-id");
+      selectedNodeId = selectedNodeId === id ? null : id;
+    } else {
+      selectedNodeId = null;
+    }
+    applyFocus();
+  }
+
+  svg.addEventListener("pointerup", finishPointer);
+  svg.addEventListener("pointercancel", event => {
+    pointerStart = null;
+    dragging = false;
+    svg.classList.remove("dragging");
+    if (svg.hasPointerCapture(event.pointerId)) {
+      svg.releasePointerCapture(event.pointerId);
+    }
+  });
+
+  svg.addEventListener("wheel", event => {
+    event.preventDefault();
+    const factor = Math.exp(-event.deltaY * 0.0015);
+    zoomAt(factor, event.clientX, event.clientY);
+  }, { passive: false });
+
+  document.getElementById("zoomInBtn").addEventListener("click", () => zoomAt(1.22));
+  document.getElementById("zoomOutBtn").addEventListener("click", () => zoomAt(1 / 1.22));
+  document.getElementById("fitBtn").addEventListener("click", fitTopology);
+  document.getElementById("searchBtn").addEventListener("click", runSearch);
+
+  searchInput.addEventListener("keydown", event => {
+    if (event.key === "Enter") runSearch();
+  });
+  searchInput.addEventListener("input", () => {
+    lastQuery = "";
+    searchIndex = -1;
+    if (!searchInput.value.trim()) {
+      searchHitId = null;
+      searchStatus.textContent = "";
+      applyFocus();
+    }
+  });
+
+  document.addEventListener("keydown", event => {
+    if (event.key === "Escape") {
+      selectedNodeId = null;
+      searchHitId = null;
+      searchInput.value = "";
+      lastQuery = "";
+      searchStatus.textContent = "";
+      applyFocus();
+    }
+  });
+
+  async function exportJpg() {
+    exportBtn.disabled = true;
+    const originalText = exportBtn.textContent;
+    exportBtn.textContent = "正在导出…";
+
+    let svgUrl = "";
+    try {
+      const bounds = world.getBBox();
+      const padding = 50;
+      const width = Math.max(1, Math.ceil(bounds.width + padding * 2));
+      const height = Math.max(1, Math.ceil(bounds.height + padding * 2));
+
+      const clone = svg.cloneNode(true);
+      clone.querySelectorAll(".dimmed,.selected,.search-hit").forEach(element => {
+        element.classList.remove("dimmed", "selected", "search-hit");
+      });
+
+      const clonedWorld = clone.querySelector("#world");
+      clonedWorld.setAttribute(
+        "transform",
+        `translate(${padding - bounds.x} ${padding - bounds.y})`
+      );
+
+      clone.setAttribute("xmlns", NS);
+      clone.setAttribute("width", width);
+      clone.setAttribute("height", height);
+      clone.setAttribute("viewBox", `0 0 ${width} ${height}`);
+      clone.removeAttribute("class");
+      clone.removeAttribute("style");
+
+      const source = new XMLSerializer().serializeToString(clone);
+      const svgBlob = new Blob([source], { type: "image/svg+xml;charset=utf-8" });
+      svgUrl = URL.createObjectURL(svgBlob);
+
+      const image = new Image();
+      await new Promise((resolve, reject) => {
+        image.onload = resolve;
+        image.onerror = () => reject(new Error("拓扑图图像化失败"));
+        image.src = svgUrl;
+      });
+
+      const exportScale = 2;
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.ceil(width * exportScale);
+      canvas.height = Math.ceil(height * exportScale);
+      const context = canvas.getContext("2d", { alpha: false });
+      context.fillStyle = "#f7f9fb";
+      context.fillRect(0, 0, canvas.width, canvas.height);
+      context.drawImage(image, 0, 0, canvas.width, canvas.height);
+
+      const jpgBlob = await new Promise((resolve, reject) => {
+        canvas.toBlob(blob => {
+          if (blob) resolve(blob);
+          else reject(new Error("JPG 编码失败"));
+        }, "image/jpeg", 0.96);
+      });
+
+      const downloadUrl = URL.createObjectURL(jpgBlob);
+      const link = document.createElement("a");
+      const title = String(TOPOLOGY_DATA.title || "通用拓扑图")
+        .replace(/[\\/:*?"<>|]/g, "_");
+      link.href = downloadUrl;
+      link.download = `${title}.jpg`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      setTimeout(() => URL.revokeObjectURL(downloadUrl), 1500);
+    } catch (error) {
+      console.error(error);
+      searchStatus.textContent = `导出失败：${error.message}`;
+    } finally {
+      if (svgUrl) URL.revokeObjectURL(svgUrl);
+      exportBtn.disabled = false;
+      exportBtn.textContent = originalText;
+    }
+  }
+
+  exportBtn.addEventListener("click", exportJpg);
+
+  document.getElementById("pageTitle").textContent =
+    String(TOPOLOGY_DATA.title || "通用拓扑图");
+  document.title = String(TOPOLOGY_DATA.title || "通用拓扑图");
+
+  applyTransform();
+  requestAnimationFrame(fitTopology);
+})();
+</script>
+</body>
+</html>

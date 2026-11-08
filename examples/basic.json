@@ -1,0 +1,102 @@
+{
+  "title": "通用拓扑示例",
+  "groups": [
+    {
+      "id": "access",
+      "name": "访问层",
+      "description": "用户入口与页面"
+    },
+    {
+      "id": "service",
+      "name": "服务层",
+      "description": "任务处理与依赖调用",
+      "columns": 1
+    },
+    {
+      "id": "storage",
+      "name": "存储层",
+      "description": "记录与文件"
+    }
+  ],
+  "nodes": [
+    {
+      "id": "browser",
+      "name": "用户入口",
+      "group": "access",
+      "tags": [
+        { "label": "入口", "meaning": "用户开始操作的位置" }
+      ],
+      "details": {
+        "类型": "浏览器页面"
+      }
+    },
+    {
+      "id": "api",
+      "name": "统一接入",
+      "group": "service",
+      "details": {
+        "职责": "鉴权与请求分发"
+      }
+    },
+    {
+      "id": "worker",
+      "name": "任务处理",
+      "group": "service",
+      "params": {
+        "并发": 4
+      }
+    },
+    {
+      "id": "store",
+      "name": "结果存储",
+      "group": "storage",
+      "details": {
+        "内容": "任务记录与结果文件"
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "entry-api",
+      "from": "browser",
+      "to": "api",
+      "label": "提交请求",
+      "type": "main"
+    },
+    {
+      "id": "api-worker",
+      "from": "api",
+      "to": "worker",
+      "label": "分发任务",
+      "type": "main"
+    },
+    {
+      "id": "worker-store",
+      "from": "worker",
+      "to": "store",
+      "label": "保存结果",
+      "type": "main"
+    },
+    {
+      "id": "store-browser",
+      "from": "store",
+      "to": "browser",
+      "label": "读取结果",
+      "type": "normal"
+    },
+    {
+      "id": "worker-retry",
+      "from": "worker",
+      "to": "worker",
+      "label": "失败重试",
+      "type": "aux"
+    }
+  ],
+  "notes": [
+    {
+      "id": "N01",
+      "target": "worker",
+      "text": "示例备注：任务处理失败后可按策略重试。"
+    }
+  ]
+}
